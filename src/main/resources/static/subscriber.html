@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Commentary</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        #commentary { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px; max-height: 400px; overflow-y: auto; }
+        .message { margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Live Commentary</h1>
+        <div>
+            <label for="matchId">Enter Match ID</label>
+            <input type="text" id="matchId" placeholder="Match ID">
+            <button onclick="connectWebSocket()">Listen</button>
+        </div>
+        <div id="commentary"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.0/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+    <script>
+        let stompClient = null;
+        let subscription = null;
+        const WS_URL = 'http://localhost:8080/ws';
+        let lastSeenTimestamp = 0;
+
+        function connectWebSocket() {
+            const matchId = document.getElementById('matchId').value.trim();
+            const commentaryDiv = document.getElementById('commentary');
+
+            if (!matchId) {
+                alert('Please enter a Match ID');
+                return;
+            }
+
+            commentaryDiv.innerHTML = '';
+            lastSeenTimestamp = 0;
+
+            fetch(`/api/commentary/history?matchId=${matchId}&after=${lastSeenTimestamp}`)
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(commentary => {
+                        displayCommentary(commentary);
+                        lastSeenTimestamp = Math.max(lastSeenTimestamp, commentary.timestamp);
+                    });
+
+                    if (!stompClient || !stompClient.connected) {
+                        const socket = new SockJS(WS_URL);
+                        stompClient = Stomp.over(socket);
+                        stompClient.connect({}, () => subscribeToMatch(matchId), onError);
+                    } else {
+                        subscribeToMatch(matchId);
+                    }
+                });
+        }
+
+        function subscribeToMatch(matchId) {
+            if (subscription) {
+                subscription.unsubscribe(); // 👈 Unsubscribe from previous match
+            }
+
+            subscription = stompClient.subscribe(`/topic/match/${matchId}`, message => {
+                const commentary = JSON.parse(message.body);
+                if (commentary.timestamp > lastSeenTimestamp) {
+                    displayCommentary(commentary);
+                    lastSeenTimestamp = commentary.timestamp;
+                }
+            });
+        }
+
+        function displayCommentary(commentary) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.innerHTML = `<strong>${formatTime(commentary.timestamp)}</strong>: ${commentary.message}`;
+            const container = document.getElementById('commentary');
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function formatTime(timestamp) {
+            return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function onError(error) {
+            console.error('STOMP connection error:', error);
+            setTimeout(connectWebSocket, 5000);
+        }
+    </script>
+</body>
+</html>
