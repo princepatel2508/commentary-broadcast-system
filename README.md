@@ -2,7 +2,7 @@
 
 A real-time commentary delivery system built with Java, Spring Boot, Kafka, and Redis, using WebSockets for live user interaction.
 
-![Demo](screenshots/Demo.gif) 
+![Demo](screenshots/Demo2.gif) 
 
 ## Features
 - **Real-time updates** via WebSockets (STOMP protocol).
